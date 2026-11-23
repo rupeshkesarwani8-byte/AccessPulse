@@ -1,0 +1,12 @@
+name,latitude,longitude,type,description,source
+Footpath taken over by vendors near KGMU Trauma Centre,26.8692,80.9162,blocked_path,"Vendors have taken over footpaths and parts of the road opposite the Trauma Centre, as reported by Hindustan Times Lucknow on 10 January 2025. The marker is placed at the KGMU campus, not at the exact spot.","Hindustan Times Lucknow, 10 Jan 2025"
+"Demo sample: no curb ramp at the crossing, Hazratganj",26.8479,80.9405,missing_ramp,"Sample report for demonstration only, not a real observation. No curb ramp at the crossing.",Demo sample data
+"Demo sample: steps at a shop entrance with no ramp, Hazratganj",26.8481,80.941,stairs,"Sample report for demonstration only, not a real observation. Steps at a shop entrance with no ramp.",Demo sample data
+"Demo sample: parked vehicles block the footpath, Hazratganj",26.8474,80.9403,blocked_path,"Sample report for demonstration only, not a real observation. Parked vehicles block the footpath.",Demo sample data
+"Demo sample: broken paving slabs on the footpath, Hazratganj",26.8475,80.9412,broken_sidewalk,"Sample report for demonstration only, not a real observation. Broken paving slabs on the footpath.",Demo sample data
+"Demo sample: crossing with a high kerb on both sides, Hazratganj",26.8483,80.94,inaccessible_crossing,"Sample report for demonstration only, not a real observation. Crossing with a high kerb on both sides.",Demo sample data
+"Demo sample: uneven footpath with loose slabs, KGMU area",26.8695,80.9166,broken_sidewalk,"Sample report for demonstration only, not a real observation. Uneven footpath with loose slabs.",Demo sample data
+"Demo sample: kerb with no ramp near a gate, KGMU area",26.8689,80.9158,missing_ramp,"Sample report for demonstration only, not a real observation. Kerb with no ramp near a gate.",Demo sample data
+"Demo sample: steps beside the entrance with no ramp, KMCLU area",26.9294,80.8958,stairs,"Sample report for demonstration only, not a real observation. Steps beside the entrance with no ramp.",Demo sample data
+"Demo sample: no ramp where the footpath meets the road, KMCLU area",26.929,80.8964,missing_ramp,"Sample report for demonstration only, not a real observation. No ramp where the footpath meets the road.",Demo sample data
+"Demo sample: no tactile paving for visually impaired walkers, KMCLU area",26.9296,80.8963,other,"Sample report for demonstration only, not a real observation. No tactile paving for visually impaired walkers.",Demo sample data

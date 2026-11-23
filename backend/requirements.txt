@@ -1,0 +1,9 @@
+
+fastapi
+uvicorn
+sqlalchemy
+pydantic-settings
+python-dotenv
+pillow
+python-multipart
+pytest

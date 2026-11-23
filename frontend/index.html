@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AccessPulse</title>
+<meta name="description" content="AccessPulse is a map where the community reports accessibility barriers in Lucknow and an administrator reviews every report.">
+<meta property="og:title" content="AccessPulse">
+<meta property="og:description" content="Report ramps, stairs and blocked footpaths on a map. Every report is reviewed and labelled.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  /* Layout concept: left aligned dark page with a live 3D glow scene in the hero.
+     Flat black bands, multi colour glow comes from the scene, glow borders and soft orbs. */
+  :root {
+    --bg: #000000;
+    --surface: #131209;
+    --surface-2: #1F1F1F;
+    --line: rgba(255, 255, 255, 0.12);
+    --fg: #FFFFFF;
+    --fg-dim: #AEAEBB;
+    --violet: #8B5CF6;
+    --cyan: #22D3EE;
+    --green: #34D399;
+    --gold: #FFC21A;
+    --orange: #FF8A3D;
+    --pink: #FF4FA3;
+    --red: #FF4F70;
+    --blue: #7AA7FF;
+    --accent: #FFC21A;
+    --accent-ink: #000000;
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --s25: 2px; --s50: 4px; --s75: 8px; --s100: 12px; --s200: 16px; --s300: 24px;
+    --s400: 32px; --s500: 40px; --s600: 48px; --s700: 64px; --s800: 80px; --s900: 96px;
+
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --section-pad: var(--s900);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font);
+    font-size: 16px; line-height: 24px; font-weight: 400; margin: 0; overflow-x: hidden;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+    z-index: 60; background: var(--bg);
+  }
+  main { overflow-x: clip; }
+  img { display: block; max-width: 100%; height: auto; }
+  a { color: inherit; }
+  h1, h2, h3, h4, p { margin: 0; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+
+  .heading-1 { font-size: 60px; line-height: 60px; font-weight: 600; text-wrap: balance; }
+  .heading-3 { font-size: 36px; line-height: 40px; font-weight: 600; text-wrap: balance; }
+  .heading-2 { font-size: 48px; line-height: 48px; font-weight: 600; text-wrap: balance; }
+  .heading-4 { font-size: 30px; line-height: 36px; font-weight: 600; text-wrap: balance; }
+  .heading-6 { font-size: 20px; line-height: 28px; font-weight: 600; text-wrap: balance; }
+  .title-2 { font-size: 18px; line-height: 28px; font-weight: 500; }
+  .title-3 { font-size: 16px; line-height: 24px; font-weight: 500; }
+  .title-4 { font-size: 14px; line-height: 20px; font-weight: 500; }
+  .body-3 { font-size: 16px; line-height: 24px; font-weight: 400; text-wrap: pretty; }
+  .body-6 { font-size: 14px; line-height: 20px; font-weight: 400; text-wrap: pretty; }
+  .button-md { font-size: 16px; line-height: 24px; font-weight: 600; }
+  .button-sm { font-size: 14px; line-height: 20px; font-weight: 600; }
+  .caption-1 { font-size: 14px; line-height: 20px; font-weight: 500; }
+  .caption-4 { font-size: 12px; line-height: 16px; font-weight: 500; }
+  .dim { color: var(--fg-dim); }
+
+  .wrap {
+    max-width: calc(1120px + 32px); margin-inline: auto; position: relative; z-index: 1;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .band { background: transparent; position: relative; padding-block: var(--section-pad); }
+
+  /* Soft glow orbs. They only move with transform. */
+  .orb {
+    position: absolute; z-index: 0; pointer-events: none; border-radius: 50%;
+    width: 560px; height: 560px; opacity: 0.28;
+    background: radial-gradient(circle, var(--o) 0%, transparent 66%);
+    animation: float 16s var(--ease) infinite alternate;
+  }
+  .orb.a { --o: var(--violet); left: -220px; top: 8%; }
+  .orb.b { --o: var(--cyan); right: -240px; top: 30%; animation-delay: -5s; }
+  .orb.c { --o: var(--pink); left: 30%; bottom: -300px; animation-delay: -9s; }
+  .orb.d { --o: var(--orange); right: -200px; bottom: -120px; animation-delay: -3s; }
+  .orb.e { --o: var(--green); left: -240px; bottom: -180px; animation-delay: -7s; }
+  @keyframes float { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(40px, -32px, 0); } }
+
+  .skip {
+    position: fixed; left: var(--s200); top: var(--s200); z-index: 100;
+    background: var(--accent); color: var(--accent-ink); padding: var(--s75) var(--s100);
+    border-radius: 8px; transform: translateY(-200%);
+  }
+  .skip:focus-visible { transform: none; }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--s75);
+    padding: var(--s75) var(--s100); border-radius: 8px; border: 1px solid transparent;
+    text-decoration: none; cursor: pointer; font-family: inherit;
+    background: var(--accent); color: var(--accent-ink);
+    box-shadow: 0 8px 32px -8px rgba(255, 79, 163, 0.65), 0 0 28px -6px rgba(255, 138, 61, 0.55);
+    transition: background-color 300ms var(--ease), transform 500ms var(--ease), box-shadow 500ms var(--ease);
+  }
+  .btn:hover {
+    background: #FFD24D; transform: translateY(-2px);
+    box-shadow: 0 12px 40px -8px rgba(139, 92, 246, 0.75), 0 0 36px -4px rgba(34, 211, 238, 0.55);
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn svg { width: 18px; height: 18px; }
+
+  /* Navigation */
+  .nav {
+    position: fixed; z-index: 70; left: 50%;
+    top: calc(var(--s200) + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+    display: flex; align-items: center; gap: var(--s300);
+    padding: var(--s75) var(--s75) var(--s75) var(--s200);
+    border-radius: 16px; border: 1px solid var(--line);
+    background: rgba(19, 18, 9, 0.66);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    box-shadow: 0 0 40px -12px rgba(139, 92, 246, 0.6);
+  }
+  .brand { display: inline-flex; align-items: center; gap: var(--s75); text-decoration: none; }
+  .brand svg { width: 20px; height: 20px; color: var(--cyan); filter: drop-shadow(0 0 6px var(--cyan)); }
+  .nav-links { display: flex; gap: var(--s300); }
+  .nav-links a { color: var(--fg-dim); text-decoration: none; transition: color 300ms var(--ease); }
+  .nav-links a:hover, .nav-links a[aria-current="true"] { color: var(--fg); }
+  .toggle { display: none; }
+
+  .panel {
+    position: fixed; inset: 0; z-index: 65; display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: center; gap: var(--s300);
+    padding: var(--s800) max(24px, env(safe-area-inset-left, 0px));
+    background: rgba(0, 0, 0, 0.94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+    opacity: 0; visibility: hidden; transition: opacity 500ms var(--ease), visibility 500ms;
+  }
+  .panel.open { opacity: 1; visibility: visible; }
+  .panel .plink {
+    text-decoration: none; opacity: 0; transform: translateY(24px);
+    transition: opacity 500ms var(--ease), transform 500ms var(--ease);
+  }
+  .panel.open .plink { opacity: 1; transform: none; transition-delay: calc(var(--i) * 60ms); }
+  .panel .btn { opacity: 0; transition: opacity 500ms var(--ease) 300ms; }
+  .panel.open .btn { opacity: 1; }
+
+  /* Hero */
+  .hero { padding-top: calc(var(--s900) + var(--s500) + env(safe-area-inset-top, 0px)); padding-bottom: var(--s800); }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: var(--s75); color: var(--fg-dim);
+    padding: var(--s50) var(--s100); border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .hero h1 {
+    max-width: 680px; margin-top: var(--s300); padding-bottom: var(--s50);
+    background: linear-gradient(90deg, #FFFFFF, #9B9B9B);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { max-width: 520px; margin-top: var(--s300); color: var(--fg-dim); }
+  .cta-row { margin-top: var(--s400); display: flex; gap: var(--s200); flex-wrap: wrap; }
+  .proof-line { margin-top: var(--s400); display: flex; flex-wrap: wrap; gap: var(--s200) var(--s300); color: var(--fg-dim); }
+  .proof-line li { display: inline-flex; align-items: center; gap: var(--s75); }
+  .proof-line svg { width: 16px; height: 16px; color: var(--green); }
+
+  #scene {
+    position: absolute; z-index: 0; pointer-events: none;
+    right: -64px; top: -24px; width: 60%; height: 640px;
+  }
+  #scene { -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 58%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 58%, transparent 100%); }
+  #scene canvas { display: block; width: 100%; height: 100%; }
+
+  .stage { perspective: 1600px; margin-top: var(--s800); position: relative; z-index: 1; }
+  .frame { position: relative; isolation: isolate; }
+  .frame::before {
+    content: ""; position: absolute; inset: -5% -3%; z-index: -1; border-radius: 32px;
+    background: conic-gradient(from 200deg, var(--violet), var(--cyan), var(--green), var(--gold), var(--orange), var(--pink), var(--violet));
+    filter: blur(56px); opacity: 0.4;
+    animation: breathe 6s var(--ease) infinite alternate;
+  }
+  @keyframes breathe { from { opacity: 0.28; } to { opacity: 0.55; } }
+  .frame img { border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.18); width: 100%; background: var(--surface); }
+  .hero .frame {
+    transform: rotateX(12deg) translateY(16px); transform-origin: 50% 100%;
+    transition: transform 900ms var(--ease);
+  }
+  .hero .frame.flat { transform: none; }
+
+  /* Section heads */
+  .section-head { max-width: 680px; margin-bottom: var(--s600); display: flex; flex-direction: column; gap: var(--s100); }
+  .section-head .body-3 { color: var(--fg-dim); }
+  .label { color: var(--c, var(--orange)); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* Glow cards: a rotating multi colour ring behind a flat surface. Only transform animates. */
+  .glow-card {
+    --c1: var(--violet); --c2: var(--cyan); --c3: var(--pink);
+    position: relative; isolation: isolate; overflow: hidden; border-radius: 16px;
+    padding: var(--s300); display: flex; flex-direction: column; gap: var(--s100);
+    box-shadow: 0 0 44px -16px var(--c1);
+    transition: transform 500ms var(--ease), box-shadow 500ms var(--ease);
+    will-change: transform;
+  }
+  .glow-card::before {
+    content: ""; position: absolute; inset: -60%; z-index: -2;
+    background: conic-gradient(var(--c1), var(--c2), var(--c3), var(--c1));
+    animation: spin 9s linear infinite;
+  }
+  .glow-card::after { content: ""; position: absolute; inset: 1px; z-index: -1; border-radius: 15px; background: var(--surface); }
+  .glow-card:hover { box-shadow: 0 0 64px -12px var(--c2); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .glow-card.k1 { --c1: var(--violet); --c2: var(--cyan); --c3: var(--pink); }
+  .glow-card.k2 { --c1: var(--orange); --c2: var(--gold); --c3: var(--red); }
+  .glow-card.k3 { --c1: var(--green); --c2: var(--cyan); --c3: var(--blue); }
+  .glow-card.k4 { --c1: var(--pink); --c2: var(--violet); --c3: var(--orange); }
+  .glow-card.k5 { --c1: var(--cyan); --c2: var(--blue); --c3: var(--violet); }
+  .glow-card.k6 { --c1: var(--gold); --c2: var(--green); --c3: var(--cyan); }
+  .glow-card .ic { width: 28px; height: 28px; color: var(--c2); filter: drop-shadow(0 0 8px var(--c2)); }
+  .glow-card p, .glow-card li { color: var(--fg-dim); }
+  .glow-card h3 { color: var(--fg); }
+  .n { color: var(--c2); text-shadow: 0 0 14px var(--c2); }
+
+  .grid { display: grid; gap: var(--s300); }
+  .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .steps { display: grid; gap: var(--s300); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .compare-label { text-transform: uppercase; letter-spacing: 0.08em; color: var(--c2); }
+  .compare ul { display: flex; flex-direction: column; gap: var(--s100); }
+  .compare li, .check li { display: flex; gap: var(--s100); align-items: flex-start; }
+  .compare li svg, .check li svg { flex: none; width: 20px; height: 20px; margin-top: var(--s25); color: var(--c2); }
+  .check { display: flex; flex-direction: column; gap: var(--s100); }
+
+  /* Tagline reveal */
+  .tagline { padding-block: var(--s900); }
+  .tagline .heading-2 { max-width: 920px; }
+  .tagline .w { color: rgba(255, 255, 255, 0.3); transition: color 700ms var(--ease), text-shadow 700ms var(--ease); }
+  .tagline .w.on { color: var(--fg); }
+  .tagline .w.on[data-c="gold"] { color: var(--gold); text-shadow: 0 0 28px rgba(255, 194, 26, 0.7); }
+  .tagline .w.on[data-c="pink"] { color: var(--pink); text-shadow: 0 0 28px rgba(255, 79, 163, 0.7); }
+  .tagline .w.on[data-c="cyan"] { color: var(--cyan); text-shadow: 0 0 28px rgba(34, 211, 238, 0.7); }
+  .tagline .w.on[data-c="orange"] { color: var(--orange); text-shadow: 0 0 28px rgba(255, 138, 61, 0.7); }
+
+  /* Prototype */
+  .shots2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s400); align-items: start; }
+  .shots2 figure { margin: 0; }
+  .shots2 figcaption { margin-top: var(--s200); color: var(--fg-dim); }
+  .shots2 .narrow .frame { max-width: 360px; }
+  .check.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s100) var(--s400); }
+  .shots { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--s400); align-items: start; }
+  .shots figure { margin: 0; }
+  .shots figcaption { margin-top: var(--s200); color: var(--fg-dim); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: var(--s100); margin-block: var(--s200) var(--s300); }
+  .chip { padding: var(--s50) var(--s100); border-radius: 999px; border: 1px solid currentColor; }
+  .chip.pending { color: var(--gold); box-shadow: 0 0 18px -4px var(--gold); }
+  .chip.verified { color: var(--green); box-shadow: 0 0 18px -4px var(--green); }
+  .chip.rejected { color: var(--red); box-shadow: 0 0 18px -4px var(--red); }
+  .chip.resolved { color: var(--blue); box-shadow: 0 0 18px -4px var(--blue); }
+  .risk { max-width: 680px; }
+  .risk ul { display: flex; flex-direction: column; gap: var(--s100); color: var(--fg-dim); }
+  .risk li { display: flex; gap: var(--s100); }
+  .risk li svg { flex: none; width: 20px; height: 20px; color: var(--green); margin-top: var(--s25); }
+
+  /* FAQ */
+  .faq { max-width: 820px; display: flex; flex-direction: column; gap: var(--s75); }
+  .faq details { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color 300ms var(--ease), box-shadow 500ms var(--ease); }
+  .faq details[open] { border-color: var(--violet); box-shadow: 0 0 32px -12px var(--violet); }
+  .faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: var(--s200); align-items: center; padding: var(--s200); }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary svg { flex: none; width: 20px; height: 20px; color: var(--cyan); transition: transform 500ms var(--ease); }
+  .faq details[open] summary svg { transform: rotate(45deg); }
+  .faq .ans { padding: 0 var(--s200) var(--s200); color: var(--fg-dim); }
+
+  .final { position: relative; overflow: hidden; }
+  .final .body-3 { color: var(--fg-dim); margin-block: var(--s200) var(--s300); max-width: 560px; }
+
+  footer { border-top: 1px solid var(--line); padding-block: var(--s600); display: grid; gap: var(--s300); }
+  .notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s400); max-width: 880px; }
+  .notes p { color: var(--fg-dim); margin-top: var(--s75); }
+  footer nav { display: flex; gap: var(--s300); flex-wrap: wrap; color: var(--fg-dim); }
+
+  /* Reveals */
+  html.js .reveal { opacity: 0; transform: translateY(32px); transition: opacity 700ms var(--ease), transform 700ms var(--ease); }
+  html.js .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 1023px) {
+    .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .steps { grid-template-columns: 1fr; }
+    .shots { grid-template-columns: 1fr; }
+    .shots2 { grid-template-columns: 1fr; }
+    .check.two { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 819px) {
+    :root { --section-pad: var(--s700); }
+    .nav-links, .nav > .btn { display: none; }
+    .nav { gap: var(--s200); padding: var(--s75) var(--s100) var(--s75) var(--s200); }
+    .toggle {
+      display: inline-flex; flex-direction: column; justify-content: center; gap: 5px; width: 40px; height: 36px;
+      background: transparent; border: 0; cursor: pointer; align-items: center;
+    }
+    .toggle span, .toggle::before, .toggle::after {
+      content: ""; display: block; width: 18px; height: 2px; background: var(--fg); border-radius: 2px;
+      transition: transform 500ms var(--ease), opacity 300ms var(--ease);
+    }
+    .toggle[aria-expanded="true"] span { opacity: 0; }
+    .toggle[aria-expanded="true"]::before { transform: translateY(7px) rotate(45deg); }
+    .toggle[aria-expanded="true"]::after { transform: translateY(-7px) rotate(-45deg); }
+    .heading-1 { font-size: 36px; line-height: 40px; }
+    .brk { display: none; }
+    .heading-2, .heading-3 { font-size: 30px; line-height: 36px; }
+    .hero { padding-top: calc(var(--s800) + var(--s300) + env(safe-area-inset-top, 0px)); padding-bottom: var(--s600); }
+    #scene { position: relative; right: auto; top: auto; width: 100%; height: 320px; margin-top: var(--s400); }
+    .stage { margin-top: var(--s400); }
+    .g2, .g3 { grid-template-columns: 1fr; }
+    .notes { grid-template-columns: 1fr; }
+    .tagline { padding-block: var(--s700); }
+    .section-head { margin-bottom: var(--s400); }
+    .orb { width: 380px; height: 380px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html.js .reveal { transform: none; transition: opacity 300ms linear; }
+    .orb, .glow-card::before, .frame::before { animation: none; }
+    .hero .frame { transform: none; transition: none; }
+    .tagline .w, .panel .plink { transition: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip button-sm" href="#main">Skip to content</a>
+
+<header>
+  <nav class="nav" aria-label="Main">
+    <a class="brand title-3" href="#top" aria-label="AccessPulse home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>
+      AccessPulse
+    </a>
+    <div class="nav-links body-6" id="navlinks">
+      <a href="#problem">Problem</a>
+      <a href="#how">How it works</a>
+      <a href="#prototype">Prototype</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <a class="btn button-sm" href="/app.html">Open the app</a>
+    <button class="toggle" id="toggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Open menu"><span></span></button>
+  </nav>
+  <div class="panel" id="panel" aria-hidden="true">
+    <a class="plink heading-6" style="--i:0" href="#problem">Problem</a>
+    <a class="plink heading-6" style="--i:1" href="#how">How it works</a>
+    <a class="plink heading-6" style="--i:2" href="#prototype">Prototype</a>
+    <a class="plink heading-6" style="--i:3" href="#faq">FAQ</a>
+    <a class="btn button-md" href="/app.html">Open the app</a>
+  </div>
+</header>
+
+<main id="main">
+<section class="band hero" id="top" style="padding-block: 0;">
+  <div class="orb a" aria-hidden="true"></div><div class="orb b" aria-hidden="true"></div>
+  <div class="wrap hero-in" style="padding-top: calc(var(--s900) + var(--s500) + env(safe-area-inset-top, 0px)); padding-bottom: var(--s800);">
+    <span class="eyebrow caption-1"><i></i>Lucknow demo area</span>
+    <h1 class="heading-1">Know the barrier<br class="brk"> before you get there.</h1>
+    <p class="sub body-3">AccessPulse is a map where people report ramps, stairs and blocked footpaths in Lucknow. An administrator reviews every report, so you can see what was seen and what was checked.</p>
+    <div class="cta-row">
+      <a class="btn button-md" href="/app.html">Open the app
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+    <ul class="proof-line body-6">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Working prototype</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>6 barrier types</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Every report reviewed by an admin</li>
+    </ul>
+    <div id="scene" aria-hidden="true"></div>
+    <div class="stage"><div class="frame" id="heroframe"><img src="/shots/explore.jpg" width="1352" height="638" alt="AccessPulse Explore Map page showing report markers on a Lucknow map beside the selected report details."></div></div>
+  </div>
+</section>
+
+<section class="band" id="problem"><div class="orb e" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--orange)">The problem</span>
+    <h2 class="heading-3">Maps show the shortest way. They do not show the missing ramp.</h2>
+    <p class="body-3">For wheelchair users, older people and anyone recovering from an injury, one set of stairs can end a journey. Navigation apps rank routes by distance and time, and Indian cities have almost no structured record of these barriers.</p>
+  </div>
+  <div class="grid g2 compare">
+    <div class="glow-card k2 tilt">
+      <span class="compare-label caption-1">Today</span>
+      <ul class="body-3">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Barriers are found by walking into them</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>No shared record of what is broken or blocked</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Authorities cannot see which problem affects the most people</li>
+      </ul>
+    </div>
+    <div class="glow-card k3 tilt">
+      <span class="compare-label caption-1">With AccessPulse</span>
+      <ul class="body-3">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Barriers are pinned on a map by the people who meet them</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Each report shows its status: pending, verified, rejected or resolved</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Administrators export the full record as a CSV file</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section class="band" id="benefits"><div class="orb c" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--cyan)">Benefits</span>
+    <h2 class="heading-3">What you get from one shared map</h2>
+  </div>
+  <div class="grid g3">
+    <article class="glow-card k1 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.4-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.6 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.5"/></svg>
+      <h3 class="title-2">Know before you go</h3>
+      <p class="body-3">See reported stairs, missing ramps and blocked paths on the map before you plan the trip.</p>
+    </article>
+    <article class="glow-card k3 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 7.6-7 9.5-4-1.9-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg>
+      <h3 class="title-2">Trust what you read</h3>
+      <p class="body-3">Every report starts as pending and carries a visible status. Nothing is presented as a certified route.</p>
+    </article>
+    <article class="glow-card k4 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+      <h3 class="title-2">Report the exact spot</h3>
+      <p class="body-3">Click the map or use your current location. No account is needed to submit a report.</p>
+    </article>
+    <article class="glow-card k5 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <h3 class="title-2">Find any place</h3>
+      <p class="body-3">Search for a landmark or area and the map flies there. Switch between a street view and a satellite view.</p>
+    </article>
+    <article class="glow-card k2 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+      <h3 class="title-2">Give authorities clear data</h3>
+      <p class="body-3">A dashboard counts reports by status and barrier type, and administrators can export every record.</p>
+    </article>
+    <article class="glow-card k6 tilt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/></svg>
+      <h3 class="title-2">See what was fixed</h3>
+      <p class="body-3">Administrators mark a barrier as resolved and can reopen it. Every change records who made it and when.</p>
+    </article>
+  </div>
+</div></section>
+
+<section class="band" id="how"><div class="orb d" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--pink)">How it works</span>
+    <h2 class="heading-3">From a pin on the map to a reviewed record</h2>
+  </div>
+  <ol class="steps">
+    <li class="glow-card k4 tilt">
+      <span class="n title-4">Step 1</span>
+      <h3 class="title-2">Pin the barrier</h3>
+      <p class="body-3">Choose one of six barrier types, describe what you saw and mark the location.</p>
+    </li>
+    <li class="glow-card k1 tilt">
+      <span class="n title-4">Step 2</span>
+      <h3 class="title-2">An administrator reviews it</h3>
+      <p class="body-3">A signed in administrator verifies or rejects the report. Verified means reviewed, not inspected by a professional.</p>
+    </li>
+    <li class="glow-card k3 tilt">
+      <span class="n title-4">Step 3</span>
+      <h3 class="title-2">See it on the dashboard</h3>
+      <p class="body-3">The map, the status counts and the barrier type chart update with the new record. Fixed barriers are marked resolved.</p>
+    </li>
+  </ol>
+</div></section>
+
+<section class="band tagline" aria-label="Our principle"><div class="orb a" aria-hidden="true"></div><div class="orb d" aria-hidden="true"></div>
+  <div class="wrap">
+    <p class="heading-2" id="tag">Every pin is a report, never a promise. AccessPulse shows what the community saw, who reviewed it, and what nobody has checked yet.</p>
+  </div>
+</section>
+
+<section class="band" id="prototype"><div class="orb b" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--green)">The prototype</span>
+    <h2 class="heading-3">Built and running today</h2>
+    <p class="body-3">These are screenshots of the working application, using sample reports in the Lucknow demo area. Most reports shown are labelled demo samples, not real observations.</p>
+  </div>
+  <div class="shots2">
+    <figure>
+      <div class="frame"><img src="/shots/dashboard.jpg" width="1352" height="638" loading="lazy" alt="AccessPulse dashboard with report totals for total, verified, pending and rejected reports, and the accessibility map of Lucknow."></div>
+      <figcaption class="body-6">Dashboard with status counts and the map.</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="/shots/priority.jpg" width="1132" height="638" loading="lazy" alt="Repair priority panel ranking reports by score, with a breakdown of severity, nearby reports, review status and waiting days."></div>
+      <figcaption class="body-6">Repair priority panel for administrators, with the score broken down.</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="/shots/satellite.jpg" width="1132" height="638" loading="lazy" alt="Explore Map in satellite view with place search and the selected report with verify and reject buttons."></div>
+      <figcaption class="body-6">Satellite view with place search and administrator actions.</figcaption>
+    </figure>
+    <figure class="narrow">
+      <div class="frame"><img src="/shots/report.jpg" width="548" height="740" loading="lazy" alt="AccessPulse report form with title, barrier type, description, coordinates, location button and source."></div>
+      <figcaption class="body-6">Report form. Click the map or use your location to fill in the coordinates.</figcaption>
+    </figure>
+  </div>
+  <div class="glow-card k6 tilt" style="margin-top: var(--s400);">
+    <h3 class="title-2">Working now</h3>
+    <ul class="check body-3 two">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Interactive map with street, OpenStreetMap and satellite views</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Place search that moves the map to a landmark</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Search and filters by status and barrier type</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>A warning when a similar report is already nearby</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Optional photo with each report, with location data removed from the file</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Administrator login with verify, reject, resolve and reopen</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Repair priority score for administrators, with the score broken down</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Status history and CSV export for administrators</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Bulk import of reports from a CSV file</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>24 automated backend tests, all passing</li>
+    </ul>
+  </div>
+</div></section>
+
+<section class="band" id="next"><div class="orb e" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--gold)">What comes next</span>
+    <h2 class="heading-3">Planned, and labelled as planned</h2>
+  </div>
+  <div class="grid g2">
+    <div class="glow-card k4 tilt">
+      <h3 class="title-2">Planned</h3>
+      <ul class="check body-3">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>Blurring of faces and number plates in photos</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>A duplicate report check on the server, not only in the browser</li>
+      </ul>
+    </div>
+    <div class="glow-card k2 tilt">
+      <h3 class="title-2">About the priority score</h3>
+      <p class="body-3">The score uses severity, nearby reports, review status and waiting time. The severity weights are our own judgement, not an official standard.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="band" id="faq"><div class="orb a" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="section-head">
+    <span class="label caption-1" style="--c: var(--violet)">Questions</span>
+    <h2 class="heading-3">Frequently asked questions</h2>
+  </div>
+  <div class="faq">
+    <details><summary class="title-3">What is AccessPulse?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">A web application where people report physical accessibility barriers on a map. An administrator reviews each report, and a dashboard summarises the results.</p></details>
+    <details><summary class="title-3">Does it give me an accessible route?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">No. Markers show submitted reports, not certified accessible routes. A route that passes no marker is not proof that it is safe.</p></details>
+    <details><summary class="title-3">What does verified mean?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">An administrator reviewed the report and accepted it. It is not a legal compliance check or a professional inspection.</p></details>
+    <details><summary class="title-3">Who can submit a report?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">Anyone. You do not need an account. New reports begin as pending until an administrator reviews them.</p></details>
+    <details><summary class="title-3">What happens when a barrier is fixed?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">An administrator marks it as resolved. The change is saved with who made it and when, and the report shows as resolved on the map. If the barrier comes back, it can be reopened.</p></details>
+    <details><summary class="title-3">Can I add a photo?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">Yes, a photo is optional. The server saves a clean copy of each JPG or PNG, up to 5 MB, which removes location and camera data. Faces and number plates are not blurred yet, so please avoid photographing people.</p></details>
+    <details><summary class="title-3">Where is the data stored?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">In the prototype, reports are saved in a local SQLite database on the machine running the application. It is a demo setup, not shared production storage.</p></details>
+    <details><summary class="title-3">Can I use it today?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p class="ans body-3">The prototype runs locally and has not been published for public use. This page shows how it works with screenshots.</p></details>
+  </div>
+</div></section>
+
+<section class="band" aria-labelledby="risk-h"><div class="wrap reveal">
+  <div class="risk">
+    <h2 class="heading-4" id="risk-h">Nothing is overstated</h2>
+    <div class="chips" aria-label="The four report statuses"><span class="chip pending caption-1">Pending</span><span class="chip verified caption-1">Verified</span><span class="chip rejected caption-1">Rejected</span><span class="chip resolved caption-1">Resolved</span></div>
+    <ul class="body-3">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>No account is needed to browse or to report</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Every new report is marked pending until it is reviewed</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Rejected reports stay visible as rejected, with their own colour</li>
+    </ul>
+  </div>
+</div></section>
+
+<section class="band" aria-labelledby="final-h"><div class="orb c" aria-hidden="true"></div><div class="wrap reveal">
+  <div class="final">
+    <h2 class="heading-3" id="final-h">See how a report moves from pin to review.</h2>
+    <p class="body-3">Look through the working prototype: the map, the report form, the dashboard and the repair priority panel.</p>
+    <a class="btn button-md" href="/app.html">Open the app
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
+  </div>
+</div></section>
+</main>
+
+<div class="wrap">
+  <footer>
+    <div>
+      <p class="title-3">AccessPulse</p>
+      <p class="body-6 dim">More Accessible. Together.</p>
+    </div>
+    <div class="notes">
+      <div id="privacy">
+        <h3 class="title-4">Privacy</h3>
+        <p class="body-6">The prototype stores each report's title, description, coordinates, source and time, and a photo if one is added. Do not enter personal details in a report. Map tiles load from Esri and OpenStreetMap, and place search uses OpenStreetMap.</p>
+      </div>
+      <div id="terms">
+        <h3 class="title-4">Terms</h3>
+        <p class="body-6">AccessPulse is a student demonstration. Reports are community submissions reviewed by an administrator. They are not a certified accessibility audit and do not guarantee that any route is safe or accessible.</p>
+      </div>
+    </div>
+    <nav class="body-6" aria-label="Footer">
+      <a href="#privacy">Privacy</a>
+      <a href="#terms">Terms</a>
+      <a href="#top">Back to top</a>
+    </nav>
+    <p class="caption-4 dim">Built by Rupesh Kumar Kesarwani, KMCLU Lucknow, for Prasunex Innovathon 2026.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    root.classList.add('js');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var hasIO = 'IntersectionObserver' in window;
+
+    // Scroll reveals, once per section
+    var reveals = document.querySelectorAll('.reveal');
+    if (hasIO) {
+      var rio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add('in'); rio.unobserve(e.target); }
+        });
+      }, { threshold: 0.08 });
+      reveals.forEach(function (el) { rio.observe(el); });
+    } else {
+      reveals.forEach(function (el) { el.classList.add('in'); });
+    }
+
+    // Hero screenshot tips flat shortly after load
+    var hf = document.getElementById('heroframe');
+    if (hf) setTimeout(function () { hf.classList.add('flat'); }, 250);
+
+    // Tagline: words wake up one at a time
+    var tag = document.getElementById('tag');
+    if (tag) {
+      var words = tag.textContent.trim().split(/\s+/);
+      tag.textContent = '';
+      var map = { 'report,': 'gold', 'promise.': 'pink', 'reviewed': 'cyan', 'checked': 'orange' };
+      var spans = words.map(function (w, i) {
+        var s = document.createElement('span');
+        s.className = 'w';
+        s.textContent = w;
+        if (map[w]) s.dataset.c = map[w];
+        tag.appendChild(s);
+        if (i < words.length - 1) tag.appendChild(document.createTextNode(' '));
+        return s;
+      });
+      if (reduce || !hasIO) {
+        spans.forEach(function (s) { s.classList.add('on'); });
+      } else {
+        var wio = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add('on'); wio.unobserve(e.target); }
+          });
+        }, { rootMargin: '0px 0px -40% 0px', threshold: 0 });
+        spans.forEach(function (s) { wio.observe(s); });
+      }
+    }
+
+    // Card tilt on pointer move (mouse only)
+    if (!reduce && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      document.querySelectorAll('.tilt').forEach(function (el) {
+        var raf = 0;
+        el.addEventListener('pointermove', function (e) {
+          var r = el.getBoundingClientRect();
+          var x = (e.clientX - r.left) / r.width - 0.5;
+          var y = (e.clientY - r.top) / r.height - 0.5;
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(function () {
+            el.style.transform = 'perspective(900px) rotateX(' + (-y * 8).toFixed(2) + 'deg) rotateY(' + (x * 10).toFixed(2) + 'deg) translateY(-4px)';
+          });
+        });
+        el.addEventListener('pointerleave', function () { cancelAnimationFrame(raf); el.style.transform = ''; });
+      });
+    }
+
+    // Mobile menu
+    var toggle = document.getElementById('toggle');
+    var panel = document.getElementById('panel');
+    function setMenu(open) {
+      panel.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      panel.setAttribute('aria-hidden', String(!open));
+      document.body.style.overflow = open ? 'hidden' : '';
+    }
+    toggle.addEventListener('click', function () { setMenu(!panel.classList.contains('open')); });
+    panel.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setMenu(false); }); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setMenu(false); });
+    window.matchMedia('(min-width: 820px)').addEventListener('change', function (m) { if (m.matches) setMenu(false); });
+
+    // Current section in the nav
+    if (hasIO) {
+      var links = {};
+      document.querySelectorAll('#navlinks a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+      var nio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            Object.keys(links).forEach(function (k) { links[k].removeAttribute('aria-current'); });
+            if (links[e.target.id]) links[e.target.id].setAttribute('aria-current', 'true');
+          }
+        });
+      }, { rootMargin: '-40% 0px -55% 0px' });
+      Object.keys(links).forEach(function (id) { var el = document.getElementById(id); if (el) nio.observe(el); });
+    }
+
+    // 3D hero scene: a glowing pin inside four status rings, over a pulsing city grid
+    var host = document.getElementById('scene');
+    if (!host || !window.THREE) return;
+    var T = window.THREE, renderer;
+    try { renderer = new T.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' }); }
+    catch (err) { return; }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    host.appendChild(renderer.domElement);
+
+    var COL = { gold: 0xffc21a, green: 0x34d399, red: 0xff4f70, blue: 0x7aa7ff,
+                violet: 0x8b5cf6, cyan: 0x22d3ee, pink: 0xff4fa3, orange: 0xff8a3d };
+    var scene = new T.Scene();
+    scene.fog = new T.FogExp2(0x000000, 0.05);
+    var camera = new T.PerspectiveCamera(40, 1, 0.1, 100);
+    camera.position.set(0, 4.6, 14.5);
+    var baseZ = 14.5;
+    var rig = new T.Group(); scene.add(rig);
+
+    scene.add(new T.AmbientLight(0x6060a0, 0.9));
+    var l1 = new T.PointLight(COL.pink, 1.6, 26); l1.position.set(-5, 4, 4); scene.add(l1);
+    var l2 = new T.PointLight(COL.cyan, 1.6, 26); l2.position.set(5, 3, 4); scene.add(l2);
+    var l3 = new T.PointLight(COL.violet, 1.3, 26); l3.position.set(0, 7, -4); scene.add(l3);
+
+    function glowTexture() {
+      var c = document.createElement('canvas'); c.width = c.height = 128;
+      var g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      return new T.CanvasTexture(c);
+    }
+    var gtex = glowTexture();
+    function glow(color, size, opacity) {
+      var s = new T.Sprite(new T.SpriteMaterial({ map: gtex, color: color, transparent: true, blending: T.AdditiveBlending, depthWrite: false, opacity: opacity }));
+      s.scale.set(size, size, 1); return s;
+    }
+    function makePin(color, scale) {
+      var g = new T.Group();
+      var m = new T.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.85, roughness: 0.35, metalness: 0.1 });
+      var head = new T.Mesh(new T.SphereGeometry(0.5, 32, 24), m); head.position.y = 1.0;
+      var tip = new T.Mesh(new T.ConeGeometry(0.42, 1.1, 32), m); tip.rotation.x = Math.PI; tip.position.y = 0.55;
+      var core = new T.Mesh(new T.SphereGeometry(0.2, 16, 12), new T.MeshBasicMaterial({ color: 0xffffff })); core.position.y = 1.0;
+      g.add(head, tip, core); g.scale.setScalar(scale); return g;
+    }
+
+    // City grid
+    var grid = new T.GridHelper(40, 40, COL.violet, COL.violet);
+    grid.material.transparent = true; grid.material.opacity = 0.32; rig.add(grid);
+
+    // Hero pin, glow and four status rings
+    var hero = new T.Group(); hero.position.y = 1.3; rig.add(hero);
+    hero.add(makePin(COL.pink, 1.7));
+    var hg1 = glow(COL.cyan, 8, 0.55); hg1.position.y = 2.2; hero.add(hg1);
+    var hg2 = glow(COL.violet, 12, 0.4); hg2.position.y = 2.2; hero.add(hg2);
+    var ringDefs = [[2.4, COL.gold], [3.1, COL.green], [3.8, COL.red], [4.5, COL.blue]];
+    var rings = ringDefs.map(function (d, i) {
+      var r = new T.Mesh(new T.TorusGeometry(d[0], 0.035, 12, 160),
+        new T.MeshBasicMaterial({ color: d[1], transparent: true, opacity: 0.95, blending: T.AdditiveBlending }));
+      r.position.y = 2.2; r.rotation.x = 0.9 + i * 0.5; r.rotation.y = i * 0.7; hero.add(r); return r;
+    });
+
+    // Small pins with ripples
+    var seed = 7; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    var palette = [COL.gold, COL.green, COL.red, COL.blue];
+    var pins = [], ripples = [];
+    for (var i = 0; i < 14; i++) {
+      var a = rnd() * Math.PI * 2, d = 5 + rnd() * 9, c = palette[i % 4];
+      var p = makePin(c, 0.55); p.position.set(Math.cos(a) * d, 0, Math.sin(a) * d - 2);
+      var gl = glow(c, 3.2, 0.8); gl.position.set(0, 1.1, 0); p.add(gl);
+      rig.add(p); pins.push(p);
+      var rp = new T.Mesh(new T.RingGeometry(0.34, 0.4, 48),
+        new T.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.8, blending: T.AdditiveBlending, side: T.DoubleSide, depthWrite: false }));
+      rp.rotation.x = -Math.PI / 2; rp.position.set(p.position.x, 0.03, p.position.z); rp.userData.phase = rnd();
+      rig.add(rp); ripples.push(rp);
+    }
+
+    // Particles
+    var N = 280, pos = new Float32Array(N * 3), cols = new Float32Array(N * 3), tmp = new T.Color();
+    var pcols = [COL.violet, COL.cyan, COL.pink, COL.gold, COL.green, COL.orange];
+    for (var j = 0; j < N; j++) {
+      pos[j * 3] = (rnd() - 0.5) * 26; pos[j * 3 + 1] = rnd() * 9; pos[j * 3 + 2] = (rnd() - 0.5) * 22;
+      tmp.setHex(pcols[j % pcols.length]); cols[j * 3] = tmp.r; cols[j * 3 + 1] = tmp.g; cols[j * 3 + 2] = tmp.b;
+    }
+    var pg = new T.BufferGeometry();
+    pg.setAttribute('position', new T.BufferAttribute(pos, 3));
+    pg.setAttribute('color', new T.BufferAttribute(cols, 3));
+    var points = new T.Points(pg, new T.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, opacity: 0.9, blending: T.AdditiveBlending, depthWrite: false }));
+    rig.add(points);
+
+    var pointer = { x: 0, y: 0 }, visible = true, clock = new T.Clock();
+    window.addEventListener('pointermove', function (e) {
+      pointer.x = (e.clientX / window.innerWidth - 0.5) * 2;
+      pointer.y = (e.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+
+    function resize() {
+      var w = host.clientWidth || 600, h = host.clientHeight || 500;
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+      baseZ = w < 520 ? 17 : 14.5; camera.position.z = baseZ;
+    }
+    function frame(t) {
+      rig.rotation.y = t * 0.1 + pointer.x * 0.35;
+      camera.position.y += ((4.6 - pointer.y * 1.2) - camera.position.y) * 0.04;
+      camera.lookAt(0, 1.6, 0);
+      hero.position.y = 1.3 + Math.sin(t * 1.2) * 0.18;
+      rings.forEach(function (r, i) { r.rotation.x += 0.004 * (i % 2 ? -1 : 1) * (1 + i * 0.3); r.rotation.y += 0.006 * (1 + i * 0.25); });
+      pins.forEach(function (p, i) { p.position.y = Math.sin(t * 1.6 + i) * 0.12; });
+      ripples.forEach(function (r) {
+        var k = (t * 0.35 + r.userData.phase) % 1;
+        r.scale.setScalar(1 + k * 6); r.material.opacity = 0.8 * (1 - k);
+      });
+      points.rotation.y = t * 0.02;
+      renderer.render(scene, camera);
+    }
+    function loop() {
+      if (!visible) return;
+      frame(clock.getElapsedTime());
+      requestAnimationFrame(loop);
+    }
+    resize();
+    if (window.ResizeObserver) new ResizeObserver(function () { resize(); if (reduce) frame(1.2); }).observe(host);
+    else window.addEventListener('resize', resize);
+
+    if (reduce) { frame(1.2); }
+    else if (hasIO) {
+      new IntersectionObserver(function (entries) {
+        var now = entries[0].isIntersecting;
+        if (now && !visible) { visible = true; loop(); } else if (!now) { visible = false; }
+      }).observe(host);
+      loop();
+    } else { loop(); }
+  })();
+</script>
+
+</body>
+</html>
